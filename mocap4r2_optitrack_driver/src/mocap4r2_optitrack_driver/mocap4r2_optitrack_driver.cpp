@@ -44,6 +44,11 @@ OptitrackDriverNode::OptitrackDriverNode()
   declare_parameter<uint16_t>("server_command_port", 0);
   declare_parameter<uint16_t>("server_data_port", 0);
 
+  declare_parameter<bool>("publish_tf", false);
+  declare_parameter<bool>("publish_y_up_tf", false);
+  declare_parameter<std::string>("rb_parent_frame_name", "optitrack");
+  declare_parameter<std::string>("y_up_frame_name", "map");
+
   client = new NatNetClient();
   client->SetFrameReceivedCallback(process_frame_callback, this);
 }
@@ -185,6 +190,83 @@ OptitrackDriverNode::process_frame(sFrameOfMocapData * data)
 
     mocap4r2_rigid_body_pub_->publish(msg_rb);
   }
+
+  if (publish_tf_ && activate_tf_) {
+    rclcpp::Time stamp = now() - frame_delay;
+    publish_tf_data(data, stamp);
+  }
+}
+
+void
+OptitrackDriverNode::update_rigid_body_id_map()
+{
+  id_rigid_body_map_.clear();
+  rigid_body_id_map_.clear();
+  for (int i = 0; i < data_descriptions->nDataDescriptions; ++i) {
+    if (data_descriptions->arrDataDescriptions[i].type == Descriptor_RigidBody) {
+      auto * rb = data_descriptions->arrDataDescriptions[i].Data.RigidBodyDescription;
+      id_rigid_body_map_[rb->ID] = rb->szName;
+      rigid_body_id_map_[rb->szName] = rb->ID;
+    }
+  }
+}
+
+void
+OptitrackDriverNode::get_rigid_bodies_from_params()
+{
+  tf_rigid_bodies_to_publish_.clear();
+  const auto result = this->get_node_parameters_interface()->list_parameters({"rigid_bodies"}, 0);
+  for (const auto & prefix : result.prefixes) {
+    std::string temp_name;
+    if (!get_parameter<std::string>(prefix + ".name", temp_name)) {
+      RCLCPP_WARN_STREAM(get_logger(), "No 'name' sub-parameter in: " << prefix);
+      continue;
+    }
+    if (rigid_body_id_map_.count(temp_name) > 0) {
+      tf_rigid_bodies_to_publish_.insert(temp_name);
+    } else {
+      RCLCPP_WARN_STREAM(
+        get_logger(), "Rigid body '" << temp_name << "' not found on NatNet server.");
+    }
+  }
+}
+
+void
+OptitrackDriverNode::publish_tf_data(sFrameOfMocapData * data, rclcpp::Time stamp)
+{
+  for (int i = 0; i < data->nRigidBodies; i++) {
+    int id = data->RigidBodies[i].ID;
+    if (id_rigid_body_map_.count(id) == 0) {continue;}
+    const auto & name = id_rigid_body_map_[id];
+    if (tf_rigid_bodies_to_publish_.count(name) == 0) {continue;}
+
+    geometry_msgs::msg::TransformStamped t;
+    t.header.stamp = stamp;
+    t.header.frame_id = rb_parent_frame_name_;
+    t.child_frame_id = name;
+    t.transform.translation.x = data->RigidBodies[i].x;
+    t.transform.translation.y = data->RigidBodies[i].y;
+    t.transform.translation.z = data->RigidBodies[i].z;
+    t.transform.rotation.x = data->RigidBodies[i].qx;
+    t.transform.rotation.y = data->RigidBodies[i].qy;
+    t.transform.rotation.z = data->RigidBodies[i].qz;
+    t.transform.rotation.w = data->RigidBodies[i].qw;
+    tf_broadcaster_->sendTransform(t);
+  }
+}
+
+void
+OptitrackDriverNode::make_static_transform()
+{
+  geometry_msgs::msg::TransformStamped t;
+  t.header.stamp = this->get_clock()->now();
+  t.header.frame_id = y_up_frame_name_;
+  t.child_frame_id = rb_parent_frame_name_;
+  t.transform.rotation.x = 0.5;
+  t.transform.rotation.y = 0.5;
+  t.transform.rotation.z = 0.5;
+  t.transform.rotation.w = 0.5;
+  tf_static_broadcaster_->sendTransform(t);
 }
 
 using CallbackReturnT =
@@ -205,6 +287,19 @@ OptitrackDriverNode::on_configure(const rclcpp_lifecycle::State & state)
 
   connect_optitrack();
 
+  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+  tf_static_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(this);
+
+  if (data_descriptions) {
+    update_rigid_body_id_map();
+  }
+  if (publish_y_up_tf_) {
+    make_static_transform();
+  }
+  if (publish_tf_) {
+    get_rigid_bodies_from_params();
+  }
+
   RCLCPP_INFO(get_logger(), "Configured!\n");
 
   return ControlledLifecycleNode::on_configure(state);
@@ -216,6 +311,7 @@ OptitrackDriverNode::on_activate(const rclcpp_lifecycle::State & state)
   (void)state;
   mocap4r2_markers_pub_->on_activate();
   mocap4r2_rigid_body_pub_->on_activate();
+  activate_tf_ = true;
   RCLCPP_INFO(get_logger(), "Activated!\n");
 
   return ControlledLifecycleNode::on_activate(state);
@@ -227,6 +323,7 @@ OptitrackDriverNode::on_deactivate(const rclcpp_lifecycle::State & state)
   (void)state;
   mocap4r2_markers_pub_->on_deactivate();
   mocap4r2_rigid_body_pub_->on_deactivate();
+  activate_tf_ = false;
   RCLCPP_INFO(get_logger(), "Deactivated!\n");
 
   return ControlledLifecycleNode::on_deactivate(state);
@@ -351,6 +448,15 @@ OptitrackDriverNode::initParameters()
   get_parameter<std::string>("multicast_address", multicast_address_);
   get_parameter<uint16_t>("server_command_port", server_command_port_);
   get_parameter<uint16_t>("server_data_port", server_data_port_);
+
+  get_parameter<bool>("publish_tf", publish_tf_);
+  get_parameter<bool>("publish_y_up_tf", publish_y_up_tf_);
+  if (publish_tf_) {
+    get_parameter<std::string>("rb_parent_frame_name", rb_parent_frame_name_);
+  }
+  if (publish_y_up_tf_) {
+    get_parameter<std::string>("y_up_frame_name", y_up_frame_name_);
+  }
 }
 
 }  // namespace mocap4r2_optitrack_driver

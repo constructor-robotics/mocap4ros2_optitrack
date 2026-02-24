@@ -50,6 +50,10 @@
 
 #include "tf2/buffer_core.h"
 #include "tf2_ros/transform_broadcaster.h"
+#include "tf2_ros/static_transform_broadcaster.h"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include <unordered_map>
+#include <set>
 
 #include <NatNetTypes.h>
 #include <NatNetCAPI.h>
@@ -84,6 +88,11 @@ public:
 
   void process_frame(sFrameOfMocapData * data);
 
+  void publish_tf_data(sFrameOfMocapData * data, rclcpp::Time stamp);
+  void make_static_transform();
+  void update_rigid_body_id_map();
+  void get_rigid_bodies_from_params();
+
 protected:
   void control_start(const mocap4r2_control_msgs::msg::Control::SharedPtr msg) override;
   void control_stop(const mocap4r2_control_msgs::msg::Control::SharedPtr msg) override;
@@ -111,6 +120,20 @@ protected:
   uint16_t server_data_port_;
 
   uint32_t frame_number_{0};
+
+  // TF publishing
+  bool publish_tf_{false};
+  bool activate_tf_{false};
+  bool publish_y_up_tf_{false};
+  std::string rb_parent_frame_name_;
+  std::string y_up_frame_name_;
+
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+  std::shared_ptr<tf2_ros::StaticTransformBroadcaster> tf_static_broadcaster_;
+
+  std::unordered_map<int, std::string> id_rigid_body_map_;
+  std::unordered_map<std::string, int> rigid_body_id_map_;
+  std::set<std::string> tf_rigid_bodies_to_publish_;
 };
 
 void NATNET_CALLCONV process_frame_callback(sFrameOfMocapData * data, void * pUserData);

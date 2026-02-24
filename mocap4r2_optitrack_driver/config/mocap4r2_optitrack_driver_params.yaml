@@ -15,3 +15,10 @@ mocap4r2_optitrack_driver_node:
     qos_history_policy: "keep_all"         # keep_all / keep_last
     qos_reliability_policy: "best_effort"  # best_effort / reliable
     qos_depth: 10                         # 10 / 100 / 1000
+    publish_y_up_tf: false
+    y_up_frame_name: "map"
+    publish_tf: false
+    rb_parent_frame_name: "optitrack"
+    rigid_bodies:
+      1:
+        name: "Rigid Body 1"
