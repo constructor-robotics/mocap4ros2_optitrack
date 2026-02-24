@@ -6,7 +6,6 @@ mocap4r2_optitrack_driver_node:
     multicast_address: "239.255.42.99"
     server_command_port: 1510
     server_data_port: 1511
-    rigid_body_name: "ground"
     lastFrameNumber: 0
     frameCount: 0
     droppedFrameCount: 0
