@@ -119,6 +119,10 @@ protected:
   uint16_t server_command_port_;
   uint16_t server_data_port_;
 
+  std::string qos_history_policy_;
+  std::string qos_reliability_policy_;
+  int qos_depth_;
+
   uint32_t frame_number_{0};
 
   // TF publishing

@@ -44,6 +44,10 @@ OptitrackDriverNode::OptitrackDriverNode()
   declare_parameter<uint16_t>("server_command_port", 1510);
   declare_parameter<uint16_t>("server_data_port", 1511);
 
+  declare_parameter<std::string>("qos_history_policy", "keep_last");
+  declare_parameter<std::string>("qos_reliability_policy", "reliable");
+  declare_parameter<int>("qos_depth", 1000);
+
   declare_parameter<bool>("publish_tf", false);
   declare_parameter<bool>("publish_y_up_tf", false);
   declare_parameter<std::string>("rb_parent_frame_name", "optitrack");
@@ -280,10 +284,22 @@ OptitrackDriverNode::on_configure(const rclcpp_lifecycle::State & state)
   (void)state;
   initParameters();
 
+  rclcpp::QoS qos_profile(qos_depth_);
+  if (qos_history_policy_ == "keep_all") {
+    qos_profile.keep_all();
+  } else {
+    qos_profile.keep_last(qos_depth_);
+  }
+  if (qos_reliability_policy_ == "best_effort") {
+    qos_profile.best_effort();
+  } else {
+    qos_profile.reliable();
+  }
+
   mocap4r2_markers_pub_ = create_publisher<mocap4r2_msgs::msg::Markers>(
-    "markers", rclcpp::QoS(1000));
+    "markers", qos_profile);
   mocap4r2_rigid_body_pub_ = create_publisher<mocap4r2_msgs::msg::RigidBodies>(
-    "rigid_bodies", rclcpp::QoS(1000));
+    "rigid_bodies", qos_profile);
 
   connect_optitrack();
 
@@ -448,6 +464,10 @@ OptitrackDriverNode::initParameters()
   get_parameter<std::string>("multicast_address", multicast_address_);
   get_parameter<uint16_t>("server_command_port", server_command_port_);
   get_parameter<uint16_t>("server_data_port", server_data_port_);
+
+  get_parameter<std::string>("qos_history_policy", qos_history_policy_);
+  get_parameter<std::string>("qos_reliability_policy", qos_reliability_policy_);
+  get_parameter<int>("qos_depth", qos_depth_);
 
   get_parameter<bool>("publish_tf", publish_tf_);
   get_parameter<bool>("publish_y_up_tf", publish_y_up_tf_);
