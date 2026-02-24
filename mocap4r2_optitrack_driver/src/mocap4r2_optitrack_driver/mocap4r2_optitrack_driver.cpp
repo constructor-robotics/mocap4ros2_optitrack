@@ -41,8 +41,8 @@ OptitrackDriverNode::OptitrackDriverNode()
   declare_parameter<std::string>("server_address", "000.000.000.000");
   declare_parameter<std::string>("local_address", "000.000.000.000");
   declare_parameter<std::string>("multicast_address", "000.000.000.000");
-  declare_parameter<uint16_t>("server_command_port", 0);
-  declare_parameter<uint16_t>("server_data_port", 0);
+  declare_parameter<uint16_t>("server_command_port", 1510);
+  declare_parameter<uint16_t>("server_data_port", 1511);
 
   declare_parameter<bool>("publish_tf", false);
   declare_parameter<bool>("publish_y_up_tf", false);
