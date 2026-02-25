@@ -61,6 +61,7 @@ OptitrackDriverNode::OptitrackDriverNode()
 
 OptitrackDriverNode::~OptitrackDriverNode()
 {
+  delete client;
 }
 
 void OptitrackDriverNode::set_settings_optitrack()
