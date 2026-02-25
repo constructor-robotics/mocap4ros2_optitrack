@@ -35,23 +35,25 @@ using std::placeholders::_1;
 using std::placeholders::_2;
 
 OptitrackDriverNode::OptitrackDriverNode()
-: ControlledLifecycleNode("mocap4r2_optitrack_driver_node")
+: ControlledLifecycleNode(
+    "mocap4r2_optitrack_driver_node",
+    rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true))
 {
-  declare_parameter<std::string>("connection_type", "Unicast");
-  declare_parameter<std::string>("server_address", "000.000.000.000");
-  declare_parameter<std::string>("local_address", "000.000.000.000");
-  declare_parameter<std::string>("multicast_address", "000.000.000.000");
-  declare_parameter<uint16_t>("server_command_port", 1510);
-  declare_parameter<uint16_t>("server_data_port", 1511);
+  if (!has_parameter("connection_type")) {declare_parameter<std::string>("connection_type", "Unicast");}
+  if (!has_parameter("server_address")) {declare_parameter<std::string>("server_address", "000.000.000.000");}
+  if (!has_parameter("local_address")) {declare_parameter<std::string>("local_address", "000.000.000.000");}
+  if (!has_parameter("multicast_address")) {declare_parameter<std::string>("multicast_address", "000.000.000.000");}
+  if (!has_parameter("server_command_port")) {declare_parameter<uint16_t>("server_command_port", 1510);}
+  if (!has_parameter("server_data_port")) {declare_parameter<uint16_t>("server_data_port", 1511);}
 
-  declare_parameter<std::string>("qos_history_policy", "keep_last");
-  declare_parameter<std::string>("qos_reliability_policy", "reliable");
-  declare_parameter<int>("qos_depth", 1000);
+  if (!has_parameter("qos_history_policy")) {declare_parameter<std::string>("qos_history_policy", "keep_last");}
+  if (!has_parameter("qos_reliability_policy")) {declare_parameter<std::string>("qos_reliability_policy", "reliable");}
+  if (!has_parameter("qos_depth")) {declare_parameter<int>("qos_depth", 1000);}
 
-  declare_parameter<bool>("publish_tf", false);
-  declare_parameter<bool>("publish_y_up_tf", false);
-  declare_parameter<std::string>("rb_parent_frame_name", "optitrack");
-  declare_parameter<std::string>("y_up_frame_name", "map");
+  if (!has_parameter("publish_tf")) {declare_parameter<bool>("publish_tf", false);}
+  if (!has_parameter("publish_y_up_tf")) {declare_parameter<bool>("publish_y_up_tf", false);}
+  if (!has_parameter("rb_parent_frame_name")) {declare_parameter<std::string>("rb_parent_frame_name", "optitrack");}
+  if (!has_parameter("y_up_frame_name")) {declare_parameter<std::string>("y_up_frame_name", "map");}
 
   client = new NatNetClient();
   client->SetFrameReceivedCallback(process_frame_callback, this);
@@ -211,8 +213,10 @@ OptitrackDriverNode::update_rigid_body_id_map()
       auto * rb = data_descriptions->arrDataDescriptions[i].Data.RigidBodyDescription;
       id_rigid_body_map_[rb->ID] = rb->szName;
       rigid_body_id_map_[rb->szName] = rb->ID;
+      RCLCPP_INFO_STREAM(get_logger(), "Mapped rigid body: ID=" << rb->ID << " name='" << rb->szName << "'");
     }
   }
+  RCLCPP_INFO_STREAM(get_logger(), "Total rigid bodies mapped: " << id_rigid_body_map_.size());
 }
 
 void
@@ -220,6 +224,14 @@ OptitrackDriverNode::get_rigid_bodies_from_params()
 {
   tf_rigid_bodies_to_publish_.clear();
   const auto result = this->get_node_parameters_interface()->list_parameters({"rigid_bodies"}, 0);
+  RCLCPP_INFO_STREAM(get_logger(), "list_parameters prefixes (" << result.prefixes.size() << "):");
+  for (const auto & p : result.prefixes) {
+    RCLCPP_INFO_STREAM(get_logger(), "  prefix: '" << p << "'");
+  }
+  RCLCPP_INFO_STREAM(get_logger(), "list_parameters names (" << result.names.size() << "):");
+  for (const auto & n : result.names) {
+    RCLCPP_INFO_STREAM(get_logger(), "  name: '" << n << "'");
+  }
   for (const auto & prefix : result.prefixes) {
     std::string temp_name;
     if (!get_parameter<std::string>(prefix + ".name", temp_name)) {
@@ -228,11 +240,13 @@ OptitrackDriverNode::get_rigid_bodies_from_params()
     }
     if (rigid_body_id_map_.count(temp_name) > 0) {
       tf_rigid_bodies_to_publish_.insert(temp_name);
+      RCLCPP_INFO_STREAM(get_logger(), "TF publishing enabled for rigid body: '" << temp_name << "'");
     } else {
       RCLCPP_WARN_STREAM(
         get_logger(), "Rigid body '" << temp_name << "' not found on NatNet server.");
     }
   }
+  RCLCPP_INFO_STREAM(get_logger(), "Total rigid bodies to publish TF for: " << tf_rigid_bodies_to_publish_.size());
 }
 
 void
