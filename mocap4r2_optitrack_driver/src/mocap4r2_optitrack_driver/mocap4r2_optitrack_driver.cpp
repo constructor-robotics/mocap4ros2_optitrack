@@ -366,13 +366,23 @@ OptitrackDriverNode::on_cleanup(const rclcpp_lifecycle::State & state)
   (void)state;
   RCLCPP_INFO(get_logger(), "Cleaned up!\n");
 
-  if (disconnect_optitrack()) {
-    return ControlledLifecycleNode::on_cleanup(state);
-  } else {
-    return CallbackReturnT::FAILURE;
+  disconnect_optitrack();
+
+  if (data_descriptions) {
+    NatNet_FreeDescriptions(data_descriptions);
+    data_descriptions = nullptr;
   }
 
-  return CallbackReturnT::SUCCESS;
+  mocap4r2_markers_pub_.reset();
+  mocap4r2_rigid_body_pub_.reset();
+  tf_broadcaster_.reset();
+  tf_static_broadcaster_.reset();
+
+  id_rigid_body_map_.clear();
+  rigid_body_id_map_.clear();
+  tf_rigid_bodies_to_publish_.clear();
+
+  return ControlledLifecycleNode::on_cleanup(state);
 }
 
 CallbackReturnT
@@ -381,11 +391,19 @@ OptitrackDriverNode::on_shutdown(const rclcpp_lifecycle::State & state)
   (void)state;
   RCLCPP_INFO(get_logger(), "Shutted down!\n");
 
-  if (disconnect_optitrack()) {
-    return ControlledLifecycleNode::on_shutdown(state);
-  } else {
-    return CallbackReturnT::FAILURE;
+  disconnect_optitrack();
+
+  if (data_descriptions) {
+    NatNet_FreeDescriptions(data_descriptions);
+    data_descriptions = nullptr;
   }
+
+  mocap4r2_markers_pub_.reset();
+  mocap4r2_rigid_body_pub_.reset();
+  tf_broadcaster_.reset();
+  tf_static_broadcaster_.reset();
+
+  return ControlledLifecycleNode::on_shutdown(state);
 }
 
 CallbackReturnT
@@ -420,6 +438,10 @@ OptitrackDriverNode::connect_optitrack()
       return false;
     }
 
+    if (data_descriptions) {
+      NatNet_FreeDescriptions(data_descriptions);
+      data_descriptions = nullptr;
+    }
     if (client->GetDataDescriptionList(&data_descriptions) != ErrorCode_OK || !data_descriptions) {
       RCLCPP_DEBUG(get_logger(), "[Client] Unable to retrieve Data Descriptions.\n");
     }
@@ -458,16 +480,10 @@ OptitrackDriverNode::connect_optitrack()
 bool
 OptitrackDriverNode::disconnect_optitrack()
 {
-  void * response;
-  int nBytes;
-  if (client->SendMessageAndWait("Disconnect", &response, &nBytes) == ErrorCode_OK) {
-    client->Disconnect();
-    RCLCPP_INFO(get_logger(), "[Client] Disconnected");
-    return true;
-  } else {
-    RCLCPP_ERROR(get_logger(), "[Client] Disconnect not successful..");
-    return false;
-  }
+  RCLCPP_INFO(get_logger(), "[Client] Disconnecting from OptiTrack NatNet SDK");
+  client->Disconnect();
+  RCLCPP_INFO(get_logger(), "[Client] Disconnected");
+  return true;
 }
 
 void

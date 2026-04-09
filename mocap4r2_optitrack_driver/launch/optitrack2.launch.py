@@ -23,10 +23,12 @@ from ament_index_python.packages import get_package_share_directory
 import launch
 
 from launch import LaunchDescription
-from launch.actions import EmitEvent
-from launch.actions import SetEnvironmentVariable,DeclareLaunchArgument
+from launch.actions import EmitEvent, RegisterEventHandler, TimerAction
+from launch.actions import SetEnvironmentVariable, DeclareLaunchArgument
+from launch.event_handlers import OnProcessStart
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import LifecycleNode
+from launch_ros.event_handlers import OnStateTransition
 from launch_ros.events.lifecycle import ChangeState
 
 import lifecycle_msgs.msg
@@ -35,14 +37,10 @@ import lifecycle_msgs.msg
 def generate_launch_description():
 
     params_file_path = os.path.join(get_package_share_directory(
-      'mocap4r2_optitrack_driver'), 'config', 'mocap4r2_optitrack_driver_params.yaml')
+      'mocap4r2_optitrack_driver'), 'config', 'mocap_test.yaml')
 
     stdout_linebuf_envvar = SetEnvironmentVariable(
         'RCUTILS_CONSOLE_STDOUT_LINE_BUFFERED', '1')
-
-    # print('')
-    # print('params_file_path: ', params_file_path)
-    # print('')
 
     driver_node = LifecycleNode(
         name='mocap4r2_optitrack_driver_node',
@@ -53,21 +51,28 @@ def generate_launch_description():
         parameters=[LaunchConfiguration('config_file')],
     )
 
-    # Make the driver node take the 'configure' transition
-    driver_configure_trans_event = EmitEvent(
-        event=ChangeState(
-            lifecycle_node_matcher=launch.events.matchers.matches_action(driver_node),
-            transition_id=lifecycle_msgs.msg.Transition.TRANSITION_CONFIGURE,
+    # Wait for the process to start before sending the configure transition.
+    # Using OnProcessStart + TimerAction avoids the race condition where the
+    # lifecycle service is not yet discoverable via DDS when launch starts.
+    configure_on_start = RegisterEventHandler(
+        OnProcessStart(
+            target_action=driver_node,
+            on_start=[
+                TimerAction(
+                    period=1.0,
+                    actions=[
+                        EmitEvent(
+                            event=ChangeState(
+                                lifecycle_node_matcher=launch.events.matchers.matches_action(
+                                    driver_node),
+                                transition_id=lifecycle_msgs.msg.Transition.TRANSITION_CONFIGURE,
+                            )
+                        )
+                    ],
+                )
+            ],
         )
     )
-
-    # Make the driver node take the 'activate' transition
-    # driver_activate_trans_event = EmitEvent(
-    #    event = ChangeState(
-    #        lifecycle_node_matcher = launch.events.matchers.matches_action(driver_node),
-    #        transition_id = lifecycle_msgs.msg.Transition.TRANSITION_ACTIVATE,
-    #     )
-    # )
 
     # Create the launch description and populate
     ld = LaunchDescription()
@@ -76,7 +81,6 @@ def generate_launch_description():
     ld.add_action(DeclareLaunchArgument('namespace', default_value=''))
     ld.add_action(DeclareLaunchArgument('config_file', default_value=params_file_path))
     ld.add_action(driver_node)
-    ld.add_action(driver_configure_trans_event)
-    # ld.add_action(driver_activate_trans_event)
+    ld.add_action(configure_on_start)
 
     return ld

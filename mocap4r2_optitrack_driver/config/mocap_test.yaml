@@ -1,0 +1,30 @@
+mocap4r2_optitrack_driver_node:
+  ros__parameters:
+    ### Communication with Optitrack params
+    connection_type: "Unicast" # Unicast / Multicast
+    server_address: "169.254.0.21"
+    local_address: "169.254.7.10"
+    multicast_address: "239.255.42.99"
+    server_command_port: 1510
+    server_data_port: 1511
+
+    ### Apparently legacy leftover parameters (Not declared or used)
+    lastFrameNumber: 0
+    frameCount: 0
+    droppedFrameCount: 0
+    n_markers: 0
+    n_unlabeled_markers: 0
+
+    ### ROS2 quality of service parameters
+    qos_history_policy: "keep_all"         # keep_all / keep_last
+    qos_reliability_policy: "best_effort"  # best_effort / reliable
+    qos_depth: 1000                         # 10 / 100 / 1000
+
+    ### TF parameters
+    publish_y_up_tf: true
+    y_up_frame_name: "map"
+    publish_tf: true
+    rb_parent_frame_name: "optitrack"
+    rigid_bodies:
+      1:
+        name: "cubr_rg_01"
